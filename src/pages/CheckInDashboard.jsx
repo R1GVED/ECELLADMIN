@@ -3,7 +3,7 @@ import { db } from '../firebase';
 import { collection, query, onSnapshot, doc, setDoc, updateDoc, writeBatch, deleteDoc, serverTimestamp, getDoc, getDocs, runTransaction } from 'firebase/firestore';
 import { useAuth } from '../context/AuthContext';
 import QRCode from 'qrcode'; // using npm package
-import { LogOut, UserPlus, Trash2, Edit2, QrCode, ClipboardList, Save, Upload, Mars, Venus } from 'lucide-react';
+import { LogOut, UserPlus, Trash2, Edit2, QrCode, ClipboardList, Save, Upload, Mars, Venus, Search, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 const ATTENDEE_COLLECTION = "rsvp_innovate_2026";
@@ -18,6 +18,9 @@ export default function CheckInDashboard() {
     // UI States
     const [qrModal, setQrModal] = useState({ show: false, name: "", barcode: "", dataUrl: "" });
     const [editModal, setEditModal] = useState({ show: false, id: "", name: "", eventName: "" });
+    const [searchTerm, setSearchTerm] = useState("");
+    const [showDropdown, setShowDropdown] = useState(false);
+    const [highlightedTeamId, setHighlightedTeamId] = useState(null);
 
     // Stats
     const currentList = activeTab === 'rsvp'
@@ -80,10 +83,17 @@ export default function CheckInDashboard() {
                 }
 
                 if (groupMembers.length > 0) {
+                    // Sort: Leaders first, then alphabetically
+                    groupMembers.sort((a, b) => {
+                        if (a.isLeader && !b.isLeader) return -1;
+                        if (!a.isLeader && b.isLeader) return 1;
+                        return a.name.localeCompare(b.name);
+                    });
                     groups.push({
                         id: docId,
                         teamName: teamName,
-                        members: groupMembers
+                        members: groupMembers,
+                        isSolo: groupMembers.length === 1
                     });
                 }
             });
@@ -330,10 +340,62 @@ export default function CheckInDashboard() {
                     {/* Content Area */}
                     {activeTab === 'rsvp' ? (
                         <div className="bg-slate-800 rounded-xl shadow-xl border border-slate-700 overflow-hidden">
-                            <div className="px-6 py-4 border-b border-slate-700 flex justify-between items-center">
+                            <div className="px-6 py-4 border-b border-slate-700 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                                 <h2 className="text-lg font-semibold text-white">Attendee List</h2>
-                                <div className="flex items-center gap-4">
-                                    <span className="text-sm text-slate-400">{stats.total} records</span>
+                                <div className="flex items-center gap-4 w-full sm:w-auto">
+                                    {/* Search Dropdown */}
+                                    <div className="relative flex-1 sm:flex-initial sm:w-64">
+                                        <Search className="absolute left-3 top-2.5 text-slate-500" size={16} />
+                                        <input
+                                            type="text"
+                                            placeholder="Search attendees..."
+                                            className="w-full bg-slate-700 border border-slate-600 rounded-lg pl-9 pr-8 py-2 text-sm focus:outline-none focus:border-indigo-500 transition-colors text-white"
+                                            value={searchTerm}
+                                            onChange={e => {
+                                                setSearchTerm(e.target.value);
+                                                setShowDropdown(e.target.value.length >= 4);
+                                            }}
+                                            onFocus={() => searchTerm.length >= 4 && setShowDropdown(true)}
+                                            onBlur={() => setTimeout(() => setShowDropdown(false), 200)}
+                                        />
+                                        {searchTerm && (
+                                            <button onClick={() => { setSearchTerm(""); setShowDropdown(false); }} className="absolute right-2 top-2.5 text-slate-400 hover:text-white">
+                                                <X size={16} />
+                                            </button>
+                                        )}
+                                        {showDropdown && searchTerm.length >= 4 && (
+                                            <div className="absolute top-full left-0 right-0 mt-1 bg-slate-700 border border-slate-600 rounded-lg shadow-xl z-50 max-h-64 overflow-y-auto">
+                                                {currentList.filter(a => a.name.toLowerCase().includes(searchTerm.toLowerCase())).slice(0, 10).map(a => (
+                                                    <button
+                                                        key={a.uniqueId}
+                                                        onClick={() => {
+                                                            setSearchTerm("");
+                                                            setShowDropdown(false);
+                                                            setHighlightedTeamId(a.id);
+                                                            // Scroll to the team
+                                                            setTimeout(() => {
+                                                                const el = document.getElementById(`team-${a.id}`);
+                                                                if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                                                // Remove highlight after 3 seconds
+                                                                setTimeout(() => setHighlightedTeamId(null), 3000);
+                                                            }, 100);
+                                                        }}
+                                                        className={`w-full text-left px-4 py-3 hover:bg-slate-600 transition-colors border-b border-slate-600 last:border-0 ${a.checkedIn ? 'bg-green-900/20' : ''}`}
+                                                    >
+                                                        <div className="font-medium text-white">{a.name}</div>
+                                                        <div className="text-xs text-slate-400 flex justify-between">
+                                                            <span>{a.team}</span>
+                                                            <span className={a.checkedIn ? 'text-green-400' : 'text-yellow-400'}>{a.checkedIn ? 'Checked In' : 'Pending'}</span>
+                                                        </div>
+                                                    </button>
+                                                ))}
+                                                {currentList.filter(a => a.name.toLowerCase().includes(searchTerm.toLowerCase())).length === 0 && (
+                                                    <div className="px-4 py-3 text-slate-400 text-sm">No matches found</div>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+                                    <span className="text-sm text-slate-400 hidden sm:inline">{stats.total} records</span>
                                     <button
                                         onClick={handleExportRSVP}
                                         className="px-3 py-1 bg-green-600 hover:bg-green-700 text-white rounded-lg text-xs font-semibold transition-colors flex items-center gap-2"
@@ -353,44 +415,55 @@ export default function CheckInDashboard() {
                                             <th className="px-6 py-3 text-center">Actions</th>
                                         </tr>
                                     </thead>
-                                    {attendeeGroups.map(group => (
-                                        <tbody key={group.id} className="divide-y divide-slate-700 border-b-8 border-slate-900 last:border-0 relative">
-                                            {/* Optional Group Header if needed, but visually grouped by border is enough */}
-                                            {group.members.map(attendee => (
-                                                <tr
-                                                    key={attendee.uniqueId}
-                                                    className={`transition-colors border-b border-slate-700/50 ${attendee.isLeader
-                                                        ? 'bg-yellow-900/20 hover:bg-yellow-900/30'
-                                                        : 'hover:bg-slate-700/30'
-                                                        }`}
-                                                >
-                                                    <td className="px-6 py-4 font-medium text-white">
-                                                        {attendee.name}
-                                                        <span className={`text-xs block font-bold ${attendee.isLeader ? 'text-yellow-400' : 'text-slate-500'}`}>
-                                                            {attendee.isLeader ? 'TEAM LEADER' : 'TEAM MEMBER'}
-                                                        </span>
-                                                    </td>
-                                                    <td className="px-6 py-4 text-slate-300 font-medium">
-                                                        {attendee.team}
-                                                    </td>
-                                                    <td className="px-6 py-4 font-mono text-sm text-slate-400">IFI2026-{attendee.barcode}</td>
-                                                    <td className="px-6 py-4">
-                                                        <button
-                                                            onClick={() => toggleCheckInSafe(attendee)}
-                                                            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 focus:ring-offset-slate-900 ${attendee.checkedIn ? 'bg-green-600' : 'bg-slate-600'}`}
+                                    {attendeeGroups.map(group => {
+                                        const isSolo = group.members.length === 1;
+                                        const isHighlighted = highlightedTeamId === group.id;
+                                        return (
+                                            <tbody
+                                                key={group.id}
+                                                id={`team-${group.id}`}
+                                                className={`divide-y divide-slate-700 border-b-8 last:border-0 relative transition-all duration-500 ${isHighlighted ? 'border-indigo-500 ring-2 ring-indigo-500 ring-offset-2 ring-offset-slate-900' : 'border-slate-900'
+                                                    } ${isSolo ? 'bg-purple-900/40' : ''}`}
+                                            >
+                                                {group.members.map(attendee => {
+                                                    let rowBg = 'hover:bg-slate-700/30';
+                                                    if (attendee.isLeader && !isSolo) rowBg = 'bg-yellow-900/20 hover:bg-yellow-900/30';
+                                                    if (isSolo) rowBg = 'bg-purple-900/40 hover:bg-purple-900/50';
+
+                                                    return (
+                                                        <tr
+                                                            key={attendee.uniqueId}
+                                                            className={`transition-colors border-b border-slate-700/50 ${rowBg}`}
                                                         >
-                                                            <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${attendee.checkedIn ? 'translate-x-6' : 'translate-x-1'}`} />
-                                                        </button>
-                                                    </td>
-                                                    <td className="px-6 py-4 flex justify-center space-x-2">
-                                                        <button onClick={() => generateQR(attendee)} className="p-2 text-indigo-400 hover:bg-indigo-900/50 rounded-lg transition-colors" title="View QR"><QrCode size={18} /></button>
-                                                        <button onClick={() => setEditModal({ show: true, ...attendee })} className="p-2 text-blue-400 hover:bg-blue-900/50 rounded-lg transition-colors" title="Edit"><Edit2 size={18} /></button>
-                                                        <button onClick={() => deleteAttendee(attendee.id)} className="p-2 text-red-400 hover:bg-red-900/50 rounded-lg transition-colors" title="Delete Parent Doc"><Trash2 size={18} /></button>
-                                                    </td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    ))}
+                                                            <td className="px-6 py-4 font-medium text-white">
+                                                                {attendee.name}
+                                                                <span className={`text-xs block font-bold ${isSolo ? 'text-purple-400' : attendee.isLeader ? 'text-yellow-400' : 'text-slate-500'}`}>
+                                                                    {isSolo ? 'SOLO PARTICIPANT' : attendee.isLeader ? 'TEAM LEADER' : 'TEAM MEMBER'}
+                                                                </span>
+                                                            </td>
+                                                            <td className="px-6 py-4 text-slate-300 font-medium">
+                                                                {attendee.team}
+                                                            </td>
+                                                            <td className="px-6 py-4 font-mono text-sm text-slate-400">IFI2026-{attendee.barcode}</td>
+                                                            <td className="px-6 py-4">
+                                                                <button
+                                                                    onClick={() => toggleCheckInSafe(attendee)}
+                                                                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 focus:ring-offset-slate-900 ${attendee.checkedIn ? 'bg-green-600' : 'bg-slate-600'}`}
+                                                                >
+                                                                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${attendee.checkedIn ? 'translate-x-6' : 'translate-x-1'}`} />
+                                                                </button>
+                                                            </td>
+                                                            <td className="px-6 py-4 flex justify-center space-x-2">
+                                                                <button onClick={() => generateQR(attendee)} className="p-2 text-indigo-400 hover:bg-indigo-900/50 rounded-lg transition-colors" title="View QR"><QrCode size={18} /></button>
+                                                                <button onClick={() => setEditModal({ show: true, ...attendee })} className="p-2 text-blue-400 hover:bg-blue-900/50 rounded-lg transition-colors" title="Edit"><Edit2 size={18} /></button>
+                                                                <button onClick={() => deleteAttendee(attendee.id)} className="p-2 text-red-400 hover:bg-red-900/50 rounded-lg transition-colors" title="Delete Parent Doc"><Trash2 size={18} /></button>
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                })}
+                                            </tbody>
+                                        );
+                                    })}
                                     {attendeeGroups.length === 0 && <tbody><tr><td colSpan="5" className="px-6 py-8 text-center text-slate-500">No attendees found.</td></tr></tbody>}
                                 </table>
                             </div>

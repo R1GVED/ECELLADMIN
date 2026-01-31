@@ -414,8 +414,12 @@ export default function CheckInDashboard() {
                                     {unstopGroups.map(group => (
                                         <tbody key={group.id} className="divide-y divide-slate-700 border-b-8 border-slate-900 last:border-0 relative">
                                             {group.members.map(u => {
-                                                const isMale = u["Candidate's Gender"]?.toLowerCase() === 'manual' || u["Candidate's Gender"] === 'M' || u["Candidate's Gender"]?.toLowerCase() === 'male';
-                                                const isFemale = u["Candidate's Gender"]?.toLowerCase() === 'f' || u["Candidate's Gender"]?.toLowerCase() === 'female';
+                                                const genderRaw = String(u["Candidate's Gender"] || "").toLowerCase();
+                                                const isMale = genderRaw === 'male' || genderRaw === 'm';
+                                                const isFemale = genderRaw === 'female' || genderRaw === 'f';
+
+                                                const textColor = isMale ? 'text-blue-300' : isFemale ? 'text-pink-300' : 'text-white';
+                                                const icon = isMale ? <Mars size={14} className="ml-2 inline text-blue-400" /> : isFemale ? <Venus size={14} className="ml-2 inline text-pink-400" /> : null;
 
                                                 let rowBg = isMale ? 'bg-blue-900/10 hover:bg-blue-900/20' : isFemale ? 'bg-pink-900/10 hover:bg-pink-900/20' : 'hover:bg-slate-700/30';
 

@@ -85,8 +85,12 @@ export default function Scanner() {
         }
     };
 
-    const handleScan = async (barcode) => {
+    const handleScan = async (scannedBarcode) => {
         try {
+            // Strip the IFI2026- prefix if present
+            const barcode = scannedBarcode.startsWith("IFI2026-")
+                ? scannedBarcode.replace("IFI2026-", "")
+                : scannedBarcode;
 
             // Strategy 1: Direct Document ID Lookup
             let docRef = doc(db, ATTENDEE_COLLECTION, barcode);

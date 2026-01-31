@@ -70,10 +70,23 @@ export default function Scanner() {
                 currentCameraId,
                 { fps: 10, qrbox: { width: 250, height: 250 } },
                 async (decodedText) => {
-                    await handleScan(decodedText);
-                    await html5QrCode.stop();
+                    // Stop scanner FIRST before processing
+                    try {
+                        await html5QrCode.stop();
+                    } catch (e) {
+                        console.log("Stop error:", e);
+                    }
                     setScanning(false);
                     videoTrackRef.current = null;
+
+                    // Reset zoom CSS
+                    const videoElement = document.querySelector('#reader video');
+                    if (videoElement) {
+                        videoElement.style.transform = '';
+                    }
+
+                    // Now process the scan
+                    await handleScan(decodedText);
                 },
                 (errorMessage) => { }
             );
@@ -226,19 +239,22 @@ export default function Scanner() {
 
                 if (targetMember) {
                     // Exact match found! 
+                    const teamName = foundData.team || "Individual";
+                    const timestamp = new Date().toLocaleString();
+
                     if (targetMember.status) {
                         setScanResult({
                             status: 'duplicate',
-                            message: `${targetMember.name} already checked in!`,
-                            attendee: { name: targetMember.name, eventName: eventName }
+                            message: `Already Checked In!`,
+                            attendee: { name: targetMember.name, team: teamName, eventName: eventName, timestamp: timestamp }
                         });
                     } else {
                         // Perform Check In
                         await performCheckIn(parentDocId, targetMember, foundData);
                         setScanResult({
                             status: 'success',
-                            message: `${targetMember.name} Checked In!`,
-                            attendee: { name: targetMember.name, eventName: eventName }
+                            message: `Checked In!`,
+                            attendee: { name: targetMember.name, team: teamName, eventName: eventName, timestamp: timestamp }
                         });
                     }
                 } else {
@@ -423,7 +439,7 @@ export default function Scanner() {
             {/* Result View */}
             {scanResult && (
                 <div className={`fixed inset-0 z-50 flex flex-col items-center justify-center p-8 text-center animate-in fade-in zoom-in duration-300 ${scanResult.status === 'success' ? 'bg-green-600' :
-                    scanResult.status === 'duplicate' ? 'bg-red-600' : 'bg-yellow-600'
+                    scanResult.status === 'duplicate' ? 'bg-blue-600' : 'bg-yellow-600'
                     }`}>
                     <div className="bg-white/10 p-6 rounded-full mb-6 backdrop-blur-sm">
                         {scanResult.status === 'success' && <CheckCircle size={64} />}
@@ -437,8 +453,14 @@ export default function Scanner() {
                         <div className="bg-black/20 p-6 rounded-xl w-full max-w-sm mb-8">
                             <p className="text-sm opacity-75 uppercase tracking-wider mb-1">Name</p>
                             <p className="text-2xl font-bold mb-4">{scanResult.attendee.name}</p>
-                            <p className="text-sm opacity-75 uppercase tracking-wider mb-1">Event</p>
-                            <p className="text-xl font-medium">{scanResult.attendee.eventName}</p>
+                            <p className="text-sm opacity-75 uppercase tracking-wider mb-1">Team</p>
+                            <p className="text-xl font-medium mb-4">{scanResult.attendee.team || scanResult.attendee.eventName}</p>
+                            {scanResult.attendee.timestamp && (
+                                <>
+                                    <p className="text-sm opacity-75 uppercase tracking-wider mb-1">Time</p>
+                                    <p className="text-lg font-medium">{scanResult.attendee.timestamp}</p>
+                                </>
+                            )}
                         </div>
                     )}
 

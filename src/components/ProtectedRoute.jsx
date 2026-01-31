@@ -9,5 +9,9 @@ export default function ProtectedRoute({ children }) {
         return <Navigate to="/login" replace />;
     }
 
+    if (currentUser.isAnonymous) {
+        return <Navigate to="/scanner" replace />;
+    }
+
     return children;
 }

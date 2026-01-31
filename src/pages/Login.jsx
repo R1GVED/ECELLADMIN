@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import { Lock, Mail, ArrowRight, AlertCircle } from 'lucide-react';
+import { Lock, Mail, ArrowRight, AlertCircle, QrCode, Users } from 'lucide-react';
+import { signInAnonymously } from 'firebase/auth';
+import { auth } from '../firebase';
 
 export default function Login() {
     const [email, setEmail] = useState("");
@@ -18,9 +20,21 @@ export default function Login() {
             setError("");
             setLoading(true);
             await login(email, password);
-            navigate("/");
+            navigate("/"); // Goes to dashboard (Admin)
         } catch {
             setError("Failed to log in. Please check your credentials.");
+        }
+        setLoading(false);
+    }
+
+    async function handleScannerLogin() {
+        try {
+            setLoading(true);
+            await signInAnonymously(auth);
+            navigate("/scanner");
+        } catch (err) {
+            console.error(err);
+            setError("Could not start scanner.");
         }
         setLoading(false);
     }
@@ -29,7 +43,7 @@ export default function Login() {
         <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-900 via-gray-800 to-black p-4">
             <div className="bg-white/10 backdrop-blur-lg border border-white/20 rounded-2xl p-8 shadow-2xl w-full max-w-md transform transition-all duration-300 hover:scale-[1.01]">
                 <div className="text-center mb-8">
-                    <h2 className="text-3xl font-bold text-white tracking-tight">Admin Portal</h2>
+                    <h2 className="text-3xl font-bold text-white tracking-tight">Event Portal</h2>
                     <p className="text-gray-400 mt-2 text-sm">Sign in to manage E-Cell Events</p>
                 </div>
 
@@ -76,13 +90,29 @@ export default function Login() {
                         disabled={loading}
                         className="w-full bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 text-white font-semibold py-3 rounded-xl shadow-lg hover:shadow-blue-500/30 transform transition-all active:scale-[0.98] flex items-center justify-center gap-2"
                     >
-                        {loading ? "Signing in..." : "Sign In"}
+                        {loading ? "Signing in..." : "Login as Admin"}
                         {!loading && <ArrowRight size={18} />}
                     </button>
                 </form>
 
-                <div className="mt-6 text-center">
-                    <p className="text-xs text-gray-500">Protected System • Authorized Personnel Only</p>
+                <div className="relative my-8">
+                    <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-gray-700"></div></div>
+                    <div className="relative flex justify-center"><span className="px-2 bg-gray-900 text-sm text-gray-500">Or Access As</span></div>
+                </div>
+
+                <div className="space-y-3">
+                    <button
+                        onClick={handleScannerLogin}
+                        className="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-2.5 rounded-xl shadow-lg flex items-center justify-center gap-2 transition-colors"
+                    >
+                        <QrCode size={18} /> Start Scanner
+                    </button>
+                    <button
+                        onClick={() => navigate('/public')}
+                        className="w-full bg-slate-700 hover:bg-slate-600 text-slate-200 font-semibold py-2.5 rounded-xl shadow-lg flex items-center justify-center gap-2 transition-colors border border-slate-600"
+                    >
+                        <Users size={18} /> Public Attendee List
+                    </button>
                 </div>
             </div>
         </div>

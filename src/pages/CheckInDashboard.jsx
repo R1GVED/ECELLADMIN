@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../firebase';
-import { collection, query, onSnapshot, doc, setDoc, updateDoc, writeBatch, deleteDoc, serverTimestamp, getDoc, getDocs } from 'firebase/firestore';
+import { collection, query, onSnapshot, doc, setDoc, updateDoc, writeBatch, deleteDoc, serverTimestamp, getDoc, getDocs, runTransaction } from 'firebase/firestore';
 import { useAuth } from '../context/AuthContext';
 import QRCode from 'qrcode'; // using npm package
 import { LogOut, UserPlus, Trash2, Edit2, QrCode, ClipboardList, Save, Upload, Mars, Venus } from 'lucide-react';
@@ -316,13 +316,13 @@ export default function CheckInDashboard() {
                                                 <tr
                                                     key={attendee.uniqueId}
                                                     className={`transition-colors border-b border-slate-700/50 ${attendee.isLeader
-                                                        ? 'bg-blue-900/20 hover:bg-blue-900/30'
-                                                        : 'bg-yellow-900/10 hover:bg-yellow-900/20'
+                                                        ? 'bg-yellow-900/20 hover:bg-yellow-900/30'
+                                                        : 'hover:bg-slate-700/30'
                                                         }`}
                                                 >
                                                     <td className="px-6 py-4 font-medium text-white">
                                                         {attendee.name}
-                                                        <span className={`text-xs block font-bold ${attendee.isLeader ? 'text-blue-400' : 'text-yellow-500'}`}>
+                                                        <span className={`text-xs block font-bold ${attendee.isLeader ? 'text-yellow-400' : 'text-slate-500'}`}>
                                                             {attendee.isLeader ? 'TEAM LEADER' : 'TEAM MEMBER'}
                                                         </span>
                                                     </td>
@@ -374,12 +374,15 @@ export default function CheckInDashboard() {
                                                 const isMale = u["Candidate's Gender"]?.toLowerCase() === 'manual' || u["Candidate's Gender"] === 'M' || u["Candidate's Gender"]?.toLowerCase() === 'male';
                                                 const isFemale = u["Candidate's Gender"]?.toLowerCase() === 'f' || u["Candidate's Gender"]?.toLowerCase() === 'female';
 
-                                                const rowBg = isMale ? 'bg-blue-900/10 hover:bg-blue-900/20' : isFemale ? 'bg-pink-900/10 hover:bg-pink-900/20' : 'hover:bg-slate-700/30';
-                                                const textColor = isMale ? 'text-blue-300' : isFemale ? 'text-pink-300' : 'text-white';
-                                                const icon = isMale ? <Mars size={14} className="ml-2 inline text-blue-400" /> : isFemale ? <Venus size={14} className="ml-2 inline text-pink-400" /> : null;
+                                                let rowBg = isMale ? 'bg-blue-900/10 hover:bg-blue-900/20' : isFemale ? 'bg-pink-900/10 hover:bg-pink-900/20' : 'hover:bg-slate-700/30';
+
+                                                const isLeader = u["Candidate role"] === "Team Leader";
+                                                if (isLeader) {
+                                                    rowBg = "bg-yellow-900/20 hover:bg-yellow-900/30";
+                                                }
 
                                                 return (
-                                                    <tr key={u.id} className={`${rowBg} transition-colors`}>
+                                                    <tr key={u.id} className={`${rowBg} transition-colors border-b border-slate-700/50`}>
                                                         <td className="px-6 py-4">
                                                             <div className={`${textColor} font-medium flex items-center`}>
                                                                 {u["Candidate's Name"]}

@@ -88,10 +88,10 @@ export default function PublicAttendance() {
                         <Users /> Public Attendee List
                     </h1>
                     <button
-                        onClick={() => navigate('/login')}
+                        onClick={() => navigate('/home')}
                         className="text-slate-400 hover:text-white text-sm underline"
                     >
-                        Back to Login
+                        Back to Home
                     </button>
                 </header>
 

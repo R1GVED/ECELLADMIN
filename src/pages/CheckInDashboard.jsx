@@ -3,7 +3,7 @@ import { db } from '../firebase';
 import { collection, query, onSnapshot, doc, setDoc, updateDoc, writeBatch, deleteDoc, serverTimestamp, getDoc, getDocs, runTransaction } from 'firebase/firestore';
 import { useAuth } from '../context/AuthContext';
 import QRCode from 'qrcode'; // using npm package
-import { LogOut, UserPlus, Trash2, Edit2, QrCode, ClipboardList, Save, Upload, Mars, Venus, Search, X } from 'lucide-react';
+import { LogOut, UserPlus, Trash2, Edit2, QrCode, ClipboardList, Save, Upload, Mars, Venus, Search, X, ArrowUp } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 const ATTENDEE_COLLECTION = "rsvp_innovate_2026";
@@ -21,6 +21,16 @@ export default function CheckInDashboard() {
     const [searchTerm, setSearchTerm] = useState("");
     const [showDropdown, setShowDropdown] = useState(false);
     const [highlightedTeamId, setHighlightedTeamId] = useState(null);
+    const [showScrollTop, setShowScrollTop] = useState(false);
+
+    // Scroll to top listener
+    useEffect(() => {
+        const handleScroll = () => {
+            setShowScrollTop(window.scrollY > 400);
+        };
+        window.addEventListener('scroll', handleScroll);
+        return () => window.removeEventListener('scroll', handleScroll);
+    }, []);
 
     // Stats
     const currentList = activeTab === 'rsvp'
@@ -141,7 +151,7 @@ export default function CheckInDashboard() {
     // Actions
     const handleLogout = async () => {
         await logout();
-        navigate('/login');
+        navigate('/home');
     };
 
     const generateQR = async (attendee) => {
@@ -470,9 +480,61 @@ export default function CheckInDashboard() {
                         </div>
                     ) : (
                         <div className="bg-slate-800 rounded-xl shadow-xl border border-slate-700 overflow-hidden">
-                            <div className="px-6 py-4 border-b border-slate-700 flex justify-between items-center">
+                            <div className="px-6 py-4 border-b border-slate-700 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                                 <h2 className="text-lg font-semibold text-white">Unstop Registrations</h2>
-                                <span className="text-sm text-slate-400">{stats.total} records</span>
+                                <div className="flex items-center gap-4 w-full sm:w-auto">
+                                    {/* Search Dropdown for Unstop */}
+                                    <div className="relative flex-1 sm:flex-initial sm:w-64">
+                                        <Search className="absolute left-3 top-2.5 text-slate-500" size={16} />
+                                        <input
+                                            type="text"
+                                            placeholder="Search attendees..."
+                                            className="w-full bg-slate-700 border border-slate-600 rounded-lg pl-9 pr-8 py-2 text-sm focus:outline-none focus:border-indigo-500 transition-colors text-white"
+                                            value={searchTerm}
+                                            onChange={e => {
+                                                setSearchTerm(e.target.value);
+                                                setShowDropdown(e.target.value.length >= 4);
+                                            }}
+                                            onFocus={() => searchTerm.length >= 4 && setShowDropdown(true)}
+                                            onBlur={() => setTimeout(() => setShowDropdown(false), 200)}
+                                        />
+                                        {searchTerm && (
+                                            <button onClick={() => { setSearchTerm(""); setShowDropdown(false); }} className="absolute right-2 top-2.5 text-slate-400 hover:text-white">
+                                                <X size={16} />
+                                            </button>
+                                        )}
+                                        {showDropdown && searchTerm.length >= 4 && (
+                                            <div className="absolute top-full left-0 right-0 mt-1 bg-slate-700 border border-slate-600 rounded-lg shadow-xl z-50 max-h-64 overflow-y-auto">
+                                                {currentList.filter(a => String(a["Candidate's Name"] || "").toLowerCase().includes(searchTerm.toLowerCase())).slice(0, 10).map(a => (
+                                                    <button
+                                                        key={a.id}
+                                                        onClick={() => {
+                                                            setSearchTerm("");
+                                                            setShowDropdown(false);
+                                                            setHighlightedTeamId(a["Team ID"] || a["Team Name"] || a.id);
+                                                            setTimeout(() => {
+                                                                const el = document.getElementById(`unstop-team-${a["Team ID"] || a["Team Name"] || a.id}`);
+                                                                if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                                                setTimeout(() => setHighlightedTeamId(null), 3000);
+                                                            }, 100);
+                                                        }}
+                                                        className={`w-full text-left px-4 py-3 hover:bg-slate-600 transition-colors border-b border-slate-600 last:border-0 ${a.checkedIn ? 'bg-green-900/20' : ''}`}
+                                                    >
+                                                        <div className="font-medium text-white">{a["Candidate's Name"]}</div>
+                                                        <div className="text-xs text-slate-400 flex justify-between">
+                                                            <span>{a["Team Name"]}</span>
+                                                            <span className={a.checkedIn ? 'text-green-400' : 'text-yellow-400'}>{a.checkedIn ? 'Checked In' : 'Pending'}</span>
+                                                        </div>
+                                                    </button>
+                                                ))}
+                                                {currentList.filter(a => String(a["Candidate's Name"] || "").toLowerCase().includes(searchTerm.toLowerCase())).length === 0 && (
+                                                    <div className="px-4 py-3 text-slate-400 text-sm">No matches found</div>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+                                    <span className="text-sm text-slate-400 hidden sm:inline">{stats.total} records</span>
+                                </div>
                             </div>
                             <div className="overflow-x-auto">
                                 <table className="w-full text-left whitespace-nowrap">
@@ -485,61 +547,68 @@ export default function CheckInDashboard() {
                                             <th className="px-6 py-3">Status</th>
                                         </tr>
                                     </thead>
-                                    {unstopGroups.map(group => (
-                                        <tbody key={group.id} className="divide-y divide-slate-700 border-b-8 border-slate-900 last:border-0 relative">
-                                            {group.members.map(u => {
-                                                const genderRaw = String(u["Candidate's Gender"] || "").toLowerCase();
-                                                const isMale = genderRaw === 'male' || genderRaw === 'm';
-                                                const isFemale = genderRaw === 'female' || genderRaw === 'f';
+                                    {unstopGroups.map(group => {
+                                        const isHighlighted = highlightedTeamId === group.id;
+                                        return (
+                                            <tbody
+                                                key={group.id}
+                                                id={`unstop-team-${group.id}`}
+                                                className={`divide-y divide-slate-700 border-b-8 last:border-0 relative transition-all duration-500 ${isHighlighted ? 'border-indigo-500 ring-2 ring-indigo-500 ring-offset-2 ring-offset-slate-900' : 'border-slate-900'
+                                                    }`}
+                                            >
+                                                {group.members.map(u => {
+                                                    const genderRaw = String(u["Candidate's Gender"] || "").toLowerCase();
+                                                    const isMale = genderRaw === 'male' || genderRaw === 'm';
+                                                    const isFemale = genderRaw === 'female' || genderRaw === 'f';
 
-                                                const textColor = isMale ? 'text-blue-300' : isFemale ? 'text-pink-300' : 'text-white';
-                                                const icon = isMale ? <Mars size={14} className="ml-2 inline text-blue-400" /> : isFemale ? <Venus size={14} className="ml-2 inline text-pink-400" /> : null;
+                                                    const textColor = isMale ? 'text-blue-300' : isFemale ? 'text-pink-300' : 'text-white';
+                                                    const icon = isMale ? <Mars size={14} className="ml-2 inline text-blue-400" /> : isFemale ? <Venus size={14} className="ml-2 inline text-pink-400" /> : null;
 
-                                                let rowBg = isMale ? 'bg-blue-900/10 hover:bg-blue-900/20' : isFemale ? 'bg-pink-900/10 hover:bg-pink-900/20' : 'hover:bg-slate-700/30';
+                                                    let rowBg = isMale ? 'bg-blue-900/10 hover:bg-blue-900/20' : isFemale ? 'bg-pink-900/10 hover:bg-pink-900/20' : 'hover:bg-slate-700/30';
 
-                                                const isLeader = u["Candidate role"] === "Team Leader";
-                                                if (isLeader) {
-                                                    rowBg = "bg-yellow-900/20 hover:bg-yellow-900/30";
-                                                }
+                                                    const isLeader = u["Candidate role"] === "Team Leader";
+                                                    if (isLeader) {
+                                                        rowBg = "bg-yellow-900/20 hover:bg-yellow-900/30";
+                                                    }
 
-                                                return (
-                                                    <tr key={u.id} className={`${rowBg} transition-colors border-b border-slate-700/50`}>
-                                                        <td className="px-6 py-4">
-                                                            <div className={`${textColor} font-medium flex items-center`}>
-                                                                {u["Candidate's Name"]}
-                                                                {icon}
-                                                            </div>
-                                                            <div className="text-xs text-slate-500">{u["Candidate's Gender"]}</div>
-                                                        </td>
-                                                        <td className="px-6 py-4">
-                                                            <div className="text-slate-300 text-sm">{u["Candidate's Email"]}</div>
-                                                            <div className="text-slate-500 text-xs">{u["Candidate's Mobile"]}</div>
-                                                        </td>
-                                                        <td className="px-6 py-4">
-                                                            <div className="text-indigo-400 font-medium">{u["Team Name"]}</div>
-                                                            <div className="text-xs text-slate-500">{u["Candidate role"]}</div>
-                                                        </td>
-                                                        <td className="px-6 py-4 text-slate-400 text-sm truncate max-w-xs" title={u["Candidate's Organisation"]}>
-                                                            {u["Candidate's Organisation"]}
-                                                        </td>
-                                                        <td className="px-6 py-4">
-                                                            <div className="flex items-center gap-3">
-                                                                <button
-                                                                    onClick={() => toggleCheckInSafe(u)}
-                                                                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 focus:ring-offset-slate-900 ${u.checkedIn ? 'bg-green-600' : 'bg-slate-600'}`}
-                                                                >
-                                                                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${u.checkedIn ? 'translate-x-6' : 'translate-x-1'}`} />
-                                                                </button>
-                                                                <span className={`px-2 py-1 rounded text-xs font-bold ${u["Reg. Status"] === "Complete" ? "bg-green-900/30 text-green-400" : "bg-yellow-900/30 text-yellow-400"}`}>
-                                                                    {u["Reg. Status"]}
-                                                                </span>
-                                                            </div>
-                                                        </td>
-                                                    </tr>
-                                                );
-                                            })}
-                                        </tbody>
-                                    ))}
+                                                    return (
+                                                        <tr key={u.id} className={`${rowBg} transition-colors border-b border-slate-700/50`}>
+                                                            <td className="px-6 py-4">
+                                                                <div className={`${textColor} font-medium flex items-center`}>
+                                                                    {u["Candidate's Name"]}
+                                                                    {icon}
+                                                                </div>
+                                                            </td>
+                                                            <td className="px-6 py-4">
+                                                                <div className="text-slate-300 text-sm">{u["Candidate's Email"]}</div>
+                                                                <div className="text-slate-500 text-xs">{u["Candidate's Mobile"]}</div>
+                                                            </td>
+                                                            <td className="px-6 py-4">
+                                                                <div className="text-indigo-400 font-medium">{u["Team Name"]}</div>
+                                                                <div className="text-xs text-slate-500">{u["Candidate role"]}</div>
+                                                            </td>
+                                                            <td className="px-6 py-4 text-slate-400 text-sm truncate max-w-xs" title={u["Candidate's Organisation"]}>
+                                                                {u["Candidate's Organisation"]}
+                                                            </td>
+                                                            <td className="px-6 py-4">
+                                                                <div className="flex items-center gap-3">
+                                                                    <button
+                                                                        onClick={() => toggleCheckInSafe(u)}
+                                                                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 focus:ring-offset-slate-900 ${u.checkedIn ? 'bg-green-600' : 'bg-slate-600'}`}
+                                                                    >
+                                                                        <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${u.checkedIn ? 'translate-x-6' : 'translate-x-1'}`} />
+                                                                    </button>
+                                                                    <span className={`px-2 py-1 rounded text-xs font-bold ${u["Reg. Status"] === "Complete" ? "bg-green-900/30 text-green-400" : "bg-yellow-900/30 text-yellow-400"}`}>
+                                                                        {u["Reg. Status"]}
+                                                                    </span>
+                                                                </div>
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                })}
+                                            </tbody>
+                                        );
+                                    })}
                                     {unstopGroups.length === 0 && (
                                         <tbody>
                                             <tr>
@@ -594,6 +663,17 @@ export default function CheckInDashboard() {
                         </div>
                     </div>
                 </div>
+            )}
+
+            {/* Go to Top Button */}
+            {showScrollTop && (
+                <button
+                    onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+                    className="fixed bottom-6 right-6 z-50 p-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-full shadow-lg transition-all duration-300 hover:scale-110"
+                    title="Go to top"
+                >
+                    <ArrowUp size={24} />
+                </button>
             )}
         </div>
     );

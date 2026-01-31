@@ -2,6 +2,7 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
+import Home from './pages/Home';
 import Login from './pages/Login';
 import EventEditor from './pages/EventEditor';
 import Scanner from './pages/Scanner';
@@ -13,12 +14,13 @@ function App() {
     <Router>
       <AuthProvider>
         <Routes>
+          <Route path="/home" element={<Home />} />
           <Route path="/login" element={<Login />} />
           <Route path="/scanner" element={<Scanner />} />
           <Route path="/public" element={<PublicAttendance />} />
 
           <Route
-            path="/"
+            path="/dashboard"
             element={
               <ProtectedRoute>
                 <CheckInDashboard />
@@ -34,6 +36,12 @@ function App() {
               </ProtectedRoute>
             }
           />
+
+          {/* Redirect root to home */}
+          <Route path="/" element={<Navigate to="/home" replace />} />
+
+          {/* Catch all - redirect to home */}
+          <Route path="*" element={<Navigate to="/home" replace />} />
         </Routes>
       </AuthProvider>
     </Router>

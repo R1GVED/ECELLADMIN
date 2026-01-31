@@ -20,7 +20,7 @@ export default function Login() {
             setError("");
             setLoading(true);
             await login(email, password);
-            navigate("/"); // Goes to dashboard (Admin)
+            navigate("/dashboard"); // Goes to dashboard (Admin)
         } catch {
             setError("Failed to log in. Please check your credentials.");
         }

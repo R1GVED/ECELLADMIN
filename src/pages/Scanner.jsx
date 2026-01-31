@@ -299,7 +299,7 @@ export default function Scanner() {
 
             <div className="w-full max-w-md flex items-center justify-between mb-6">
                 <button
-                    onClick={() => navigate(-1)}
+                    onClick={() => navigate('/home')}
                     className="p-2 bg-slate-800 rounded-full hover:bg-slate-700 transition-colors"
                 >
                     <ArrowLeft size={24} className="text-slate-300" />

@@ -3,7 +3,7 @@ import { Html5Qrcode } from "html5-qrcode";
 import { db, auth } from '../firebase';
 import { doc, getDoc, updateDoc, serverTimestamp, getDocs, query, where, collection, runTransaction } from 'firebase/firestore';
 import { signInAnonymously } from 'firebase/auth';
-import { AlertCircle, Camera, CheckCircle, RefreshCw, ZoomIn, Lock, ArrowLeft } from 'lucide-react';
+import { AlertCircle, Camera, CheckCircle, RefreshCw, ZoomIn, ZoomOut, Lock, ArrowLeft, Home, Minus, Plus } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 const ATTENDEE_COLLECTION = "rsvp_innovate_2026";
@@ -18,6 +18,10 @@ export default function Scanner() {
     const scannerRef = useRef(null);
     const html5QrCodeRef = useRef(null);
     const [modalData, setModalData] = useState(null); // For team selection
+    const [zoomLevel, setZoomLevel] = useState(1);
+    const [maxZoom, setMaxZoom] = useState(5); // Default to 5x for CSS fallback
+    const [hasHardwareZoom, setHasHardwareZoom] = useState(false);
+    const videoTrackRef = useRef(null);
 
     // ... (Init effect remains the same, skipping for brevity in replacement if possible, but safely replacing block) ...
     // To safe space I will just replace `const ATTENDEE_COLLECTION` line and `handleScan` logic mostly. 
@@ -56,6 +60,7 @@ export default function Scanner() {
         setScanning(true);
         setScanResult(null);
         setModalData(null);
+        setZoomLevel(1);
 
         try {
             const html5QrCode = new Html5Qrcode("reader");
@@ -68,13 +73,57 @@ export default function Scanner() {
                     await handleScan(decodedText);
                     await html5QrCode.stop();
                     setScanning(false);
+                    videoTrackRef.current = null;
                 },
                 (errorMessage) => { }
             );
+
+            // Get video track for zoom control
+            setTimeout(() => {
+                try {
+                    const videoElement = document.querySelector('#reader video');
+                    if (videoElement && videoElement.srcObject) {
+                        const tracks = videoElement.srcObject.getVideoTracks();
+                        if (tracks.length > 0) {
+                            videoTrackRef.current = tracks[0];
+                            const capabilities = tracks[0].getCapabilities();
+                            if (capabilities && capabilities.zoom) {
+                                setMaxZoom(capabilities.zoom.max || 5);
+                                setHasHardwareZoom(true);
+                            }
+                        }
+                    }
+                } catch (e) {
+                    console.log("Could not get zoom capabilities:", e);
+                }
+            }, 500);
         } catch (err) {
             console.error("Start error:", err);
             setError("Failed to start camera.");
             setScanning(false);
+        }
+    };
+
+    const applyZoom = async (newZoom) => {
+        setZoomLevel(newZoom);
+
+        // Try hardware zoom first
+        if (hasHardwareZoom && videoTrackRef.current) {
+            try {
+                await videoTrackRef.current.applyConstraints({
+                    advanced: [{ zoom: newZoom }]
+                });
+                return;
+            } catch (e) {
+                console.log("Hardware zoom failed, using CSS fallback:", e);
+            }
+        }
+
+        // CSS transform fallback
+        const videoElement = document.querySelector('#reader video');
+        if (videoElement) {
+            videoElement.style.transform = `scale(${newZoom})`;
+            videoElement.style.transformOrigin = 'center center';
         }
     };
 
@@ -318,9 +367,43 @@ export default function Scanner() {
                             <Camera /> Start Scanner
                         </button>
                     ) : (
-                        <button onClick={stopScanning} className="w-full py-3 bg-red-600 hover:bg-red-700 rounded-lg font-bold">
-                            Stop Scanner
-                        </button>
+                        <div className="space-y-3">
+                            <button onClick={stopScanning} className="w-full py-3 bg-red-600 hover:bg-red-700 rounded-lg font-bold">
+                                Stop Scanner
+                            </button>
+
+                            {/* Zoom Controls - Always show */}
+                            <div className="bg-slate-800 rounded-lg p-3">
+                                <div className="flex items-center justify-between text-sm text-slate-400 mb-2">
+                                    <span className="flex items-center gap-1"><ZoomOut size={16} /> 1x</span>
+                                    <span className="text-indigo-400 font-bold">{zoomLevel.toFixed(1)}x</span>
+                                    <span className="flex items-center gap-1">{maxZoom.toFixed(0)}x <ZoomIn size={16} /></span>
+                                </div>
+                                <input
+                                    type="range"
+                                    min="1"
+                                    max={maxZoom}
+                                    step="0.1"
+                                    value={zoomLevel}
+                                    onChange={(e) => applyZoom(parseFloat(e.target.value))}
+                                    className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-indigo-500"
+                                />
+                                <div className="flex justify-center gap-2 mt-2">
+                                    <button
+                                        onClick={() => applyZoom(Math.max(1, zoomLevel - 0.5))}
+                                        className="px-3 py-1 bg-slate-700 hover:bg-slate-600 rounded text-sm flex items-center gap-1"
+                                    >
+                                        <Minus size={14} /> Zoom Out
+                                    </button>
+                                    <button
+                                        onClick={() => applyZoom(Math.min(maxZoom, zoomLevel + 0.5))}
+                                        className="px-3 py-1 bg-slate-700 hover:bg-slate-600 rounded text-sm flex items-center gap-1"
+                                    >
+                                        <Plus size={14} /> Zoom In
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
                     )}
 
                     {cameras.length > 1 && !scanning && (
@@ -359,12 +442,20 @@ export default function Scanner() {
                         </div>
                     )}
 
-                    <button
-                        onClick={resetScan}
-                        className="bg-white text-slate-900 px-8 py-4 rounded-xl font-bold text-xl shadow-lg hover:scale-105 transition-transform flex items-center gap-2"
-                    >
-                        <RefreshCw /> Scan Next
-                    </button>
+                    <div className="flex gap-4">
+                        <button
+                            onClick={resetScan}
+                            className="bg-white text-slate-900 px-6 py-4 rounded-xl font-bold text-lg shadow-lg hover:scale-105 transition-transform flex items-center gap-2"
+                        >
+                            <RefreshCw size={20} /> Scan Next
+                        </button>
+                        <button
+                            onClick={() => navigate('/home')}
+                            className="bg-slate-800 text-white px-6 py-4 rounded-xl font-bold text-lg shadow-lg hover:scale-105 transition-transform flex items-center gap-2 border border-white/30"
+                        >
+                            <Home size={20} /> Go Home
+                        </button>
+                    </div>
                 </div>
             )}
 

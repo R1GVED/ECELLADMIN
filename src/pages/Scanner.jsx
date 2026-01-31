@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Html5Qrcode } from "html5-qrcode";
 import { db, auth } from '../firebase';
-import { doc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, serverTimestamp, getDocs, query, where, collection } from 'firebase/firestore';
 import { signInAnonymously } from 'firebase/auth';
 import { AlertCircle, Camera, CheckCircle, RefreshCw, ZoomIn, Lock } from 'lucide-react';
 
@@ -85,45 +85,115 @@ export default function Scanner() {
 
     const handleScan = async (barcode) => {
         try {
-            const docRef = doc(db, ATTENDEE_COLLECTION, barcode);
-            const docSnap = await getDoc(docRef);
+            // Strategy 1: Direct Document ID Lookup
+            let docRef = doc(db, ATTENDEE_COLLECTION, barcode);
+            let docSnap = await getDoc(docRef);
+            let parentDocId = barcode;
+            let foundData = null;
 
             if (docSnap.exists()) {
-                const data = docSnap.data();
+                foundData = docSnap.data();
+            } else {
+                // Strategy 2: Query by Root ticketId (if barcode is ticketId but not DocID)
+                // Note: User data suggests ticketId might be unique.
+                const q = query(collection(db, ATTENDEE_COLLECTION), where("ticketId", "==", barcode));
+                const querySnap = await getDocs(q);
+                if (!querySnap.empty) {
+                    foundData = querySnap.docs[0].data();
+                    parentDocId = querySnap.docs[0].id;
+                }
+            }
+
+            // Strategy 3: Brute-force Members Array Search (Fallback)
+            // Limitations: Slow for large collections, but necessary without array-contains-object query structure
+            if (!foundData) {
+                const allDocs = await getDocs(collection(db, ATTENDEE_COLLECTION));
+                for (const d of allDocs.docs) {
+                    const dData = d.data();
+                    if (Array.isArray(dData.members)) {
+                        const match = dData.members.find(m => m.ticketId === barcode);
+                        if (match) {
+                            foundData = dData;
+                            parentDocId = d.id;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            if (foundData) {
+                // Now parse the found document (same logic as Dashboard)
                 const members = [];
+                const eventName = foundData.event || foundData.eventName || "Event";
 
-                if (data.name) {
-                    members.push({ name: data.name, field: 'checkedIn', status: !!data.checkedIn });
-                } else {
-                    if (data['Team Leader Name']) members.push({ name: data['Team Leader Name'] + " (Leader)", field: 'leader_checkedIn', status: !!data.leader_checkedIn });
-                    for (let i = 1; i <= 5; i++) {
-                        if (data[`Team Member ${i}`]) members.push({ name: data[`Team Member ${i}`], field: `member_${i}_checkedIn`, status: !!data[`member_${i}_checkedIn`] });
+                // Check Root (Leader)
+                if (foundData.ticketId === barcode || foundData.name) {
+                    // If barcode matches leader ticket OR if we found doc by some other means and want to offer leader check-in
+                    // Logic: If scanned specific member ticket, only show that member?
+                    // Current logic: Show Selection if multiple, or simple check-in if single match.
+
+                    // Let's build the list of ALL possible people in this doc to allow selection, 
+                    // OR intelligently highlight the one that was scanned.
+
+                    // Add Leader
+                    if (foundData.name) {
+                        const isTarget = (foundData.ticketId === barcode || parentDocId === barcode);
+                        members.push({
+                            name: foundData.name + " (Leader)",
+                            field: 'checkedIn',
+                            status: !!foundData.checkedIn,
+                            isLeader: true,
+                            index: -1,
+                            isTarget: isTarget
+                        });
                     }
                 }
 
-                if (members.length === 0) {
-                    setScanResult({
-                        status: 'error',
-                        message: 'Empty Record Found',
-                        barcode
+                // Add Members
+                if (Array.isArray(foundData.members)) {
+                    foundData.members.forEach((m, idx) => {
+                        const isTarget = m.ticketId === barcode;
+                        members.push({
+                            name: m.name + " (Member)",
+                            field: 'member', // signal to use array update
+                            status: !!m.checkedIn,
+                            isLeader: false,
+                            index: idx,
+                            isTarget: isTarget
+                        });
                     });
-                } else if (members.length === 1) {
-                    // Direct check-in for single
-                    const mem = members[0];
-                    if (mem.status) {
-                        setScanResult({ status: 'duplicate', message: `${mem.name} already checked in!`, attendee: { name: mem.name, eventName: data.event_name } });
+                }
+
+                // Filter? 
+                // If we found the doc via a specific Member Ticket ID, we should probably auto-select that member?
+                const targetMember = members.find(m => m.isTarget);
+
+                if (targetMember) {
+                    // Exact match found! 
+                    if (targetMember.status) {
+                        setScanResult({
+                            status: 'duplicate',
+                            message: `${targetMember.name} already checked in!`,
+                            attendee: { name: targetMember.name, eventName: eventName }
+                        });
                     } else {
-                        await updateDoc(docRef, { [mem.field]: true, [`${mem.field}_at`]: serverTimestamp() });
-                        setScanResult({ status: 'success', message: `${mem.name} Checked In!`, attendee: { name: mem.name, eventName: data.event_name } });
+                        // Perform Check In
+                        await performCheckIn(parentDocId, targetMember, foundData);
+                        setScanResult({
+                            status: 'success',
+                            message: `${targetMember.name} Checked In!`,
+                            attendee: { name: targetMember.name, eventName: eventName }
+                        });
                     }
                 } else {
-                    // Multiple Members - Show Selection Modal
-                    setModalData({ id: barcode, eventName: data.event_name, members });
+                    // Scan matched the Doc/Team but not a specific ticket? Or fallback to Team View.
+                    setModalData({ id: parentDocId, eventName: eventName, members });
                 }
+
             } else {
                 setScanResult({
                     status: 'error',
-                    message: 'Attendee not found.',
+                    message: 'Attendee NOT found.',
                     barcode
                 });
             }
@@ -133,20 +203,46 @@ export default function Scanner() {
         }
     };
 
+    const performCheckIn = async (docId, memberObj, fullDocData) => {
+        const docRef = doc(db, ATTENDEE_COLLECTION, docId);
+        if (memberObj.isLeader) {
+            await updateDoc(docRef, {
+                checkedIn: true,
+                checkInTime: serverTimestamp()
+            });
+        } else {
+            // Array Update
+            const updatedMembers = [...(fullDocData.members || [])];
+            if (updatedMembers[memberObj.index]) {
+                updatedMembers[memberObj.index] = {
+                    ...updatedMembers[memberObj.index],
+                    checkedIn: true,
+                    checkInTime: new Date().toISOString()
+                };
+                await updateDoc(docRef, { members: updatedMembers });
+            }
+        }
+    };
+
     const checkInMember = async (memberIndex) => {
         try {
             const mem = modalData.members[memberIndex];
-            await updateDoc(doc(db, ATTENDEE_COLLECTION, modalData.id), {
-                [mem.field]: true,
-                [`${mem.field}_at`]: serverTimestamp()
-            });
-            // Update local state to show it's done
-            const newMems = [...modalData.members];
-            newMems[memberIndex].status = true;
-            setModalData({ ...modalData, members: newMems });
-            // Optional: If you want to show a global success, or just let them keep clicking
+            // We need fullDocData for array update, but we can assume modalData has context or re-fetch?
+            // Re-fetch to be safe and simple
+            const docRef = doc(db, ATTENDEE_COLLECTION, modalData.id);
+            const snap = await getDoc(docRef);
+
+            if (snap.exists()) {
+                await performCheckIn(modalData.id, mem, snap.data());
+
+                // Update local state
+                const newMems = [...modalData.members];
+                newMems[memberIndex].status = true;
+                setModalData({ ...modalData, members: newMems });
+            }
         } catch (e) {
             alert("Error checking in " + modalData.members[memberIndex].name);
+            console.error(e);
         }
     };
 

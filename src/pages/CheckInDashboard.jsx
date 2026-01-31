@@ -136,7 +136,8 @@ export default function CheckInDashboard() {
 
     const generateQR = async (attendee) => {
         try {
-            const codeToEncode = attendee.barcode && attendee.barcode !== "N/A" ? attendee.barcode : attendee.id;
+            const rawCode = attendee.barcode && attendee.barcode !== "N/A" ? attendee.barcode : attendee.id;
+            const codeToEncode = `IFI2026-${rawCode}`;
             const url = await QRCode.toDataURL(codeToEncode);
             setQrModal({ show: true, name: attendee.name, barcode: codeToEncode, dataUrl: url });
         } catch (err) {
@@ -372,7 +373,7 @@ export default function CheckInDashboard() {
                                                     <td className="px-6 py-4 text-slate-300 font-medium">
                                                         {attendee.team}
                                                     </td>
-                                                    <td className="px-6 py-4 font-mono text-sm text-slate-400">{attendee.barcode}</td>
+                                                    <td className="px-6 py-4 font-mono text-sm text-slate-400">IFI2026-{attendee.barcode}</td>
                                                     <td className="px-6 py-4">
                                                         <button
                                                             onClick={() => toggleCheckInSafe(attendee)}

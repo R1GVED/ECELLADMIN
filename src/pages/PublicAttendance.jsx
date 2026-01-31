@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { db } from '../firebase';
+import { db, auth } from '../firebase';
 import { collection, query, onSnapshot } from 'firebase/firestore';
+import { signInAnonymously } from 'firebase/auth';
 import { Users, Search, Mars, Venus } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
@@ -18,6 +19,10 @@ export default function PublicAttendance() {
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState("");
     const navigate = useNavigate();
+
+    useEffect(() => {
+        signInAnonymously(auth).catch(err => console.error("Auth failed:", err));
+    }, []);
 
     useEffect(() => {
         // RSVP Listener
@@ -132,8 +137,8 @@ export default function PublicAttendance() {
         : unstopGroups.map(g => ({
             ...g,
             members: g.members.filter(m =>
-                (m["Candidate's Name"] || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
-                g.teamName.toLowerCase().includes(searchTerm.toLowerCase())
+                String(m["Candidate's Name"] || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+                String(g.teamName || "").toLowerCase().includes(searchTerm.toLowerCase())
             )
         })).filter(g => g.members.length > 0);
 
@@ -233,8 +238,9 @@ export default function PublicAttendance() {
                             {activeTab === 'unstop' && filteredGroups.map(group => (
                                 <tbody key={group.id} className="divide-y divide-slate-700 border-b-8 border-slate-900 last:border-0 relative">
                                     {group.members.map(u => {
-                                        const isMale = u["Candidate's Gender"]?.toLowerCase() === 'manual' || u["Candidate's Gender"] === 'M' || u["Candidate's Gender"]?.toLowerCase() === 'male';
-                                        const isFemale = u["Candidate's Gender"]?.toLowerCase() === 'f' || u["Candidate's Gender"]?.toLowerCase() === 'female';
+                                        const genderRaw = String(u["Candidate's Gender"] || "").toLowerCase();
+                                        const isMale = genderRaw === 'manual' || genderRaw === 'm' || genderRaw === 'male';
+                                        const isFemale = genderRaw === 'f' || genderRaw === 'female';
 
                                         const textColor = isMale ? 'text-blue-300' : isFemale ? 'text-pink-300' : 'text-white';
                                         const icon = isMale ? <Mars size={14} className="ml-2 inline text-blue-400" /> : isFemale ? <Venus size={14} className="ml-2 inline text-pink-400" /> : null;

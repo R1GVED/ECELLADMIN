@@ -1,9 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Html5Qrcode } from "html5-qrcode";
 import { db, auth } from '../firebase';
-import { doc, getDoc, updateDoc, serverTimestamp, getDocs, query, where, collection } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, serverTimestamp, getDocs, query, where, collection, runTransaction } from 'firebase/firestore';
 import { signInAnonymously } from 'firebase/auth';
-import { AlertCircle, Camera, CheckCircle, RefreshCw, ZoomIn, Lock } from 'lucide-react';
+import { AlertCircle, Camera, CheckCircle, RefreshCw, ZoomIn, Lock, ArrowLeft } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 const ATTENDEE_COLLECTION = "rsvp_innovate_2026";
 
@@ -11,6 +12,7 @@ export default function Scanner() {
     const [scanResult, setScanResult] = useState(null);
     const [error, setError] = useState(null);
     const [scanning, setScanning] = useState(false);
+    const navigate = useNavigate();
     const [cameras, setCameras] = useState([]);
     const [currentCameraId, setCurrentCameraId] = useState(null);
     const scannerRef = useRef(null);
@@ -207,23 +209,32 @@ export default function Scanner() {
 
     const performCheckIn = async (docId, memberObj, fullDocData) => {
         const docRef = doc(db, ATTENDEE_COLLECTION, docId);
-        if (memberObj.isLeader) {
-            await updateDoc(docRef, {
-                checkedIn: true,
-                checkInTime: serverTimestamp()
-            });
-        } else {
-            // Array Update
-            const updatedMembers = [...(fullDocData.members || [])];
-            if (updatedMembers[memberObj.index]) {
-                updatedMembers[memberObj.index] = {
-                    ...updatedMembers[memberObj.index],
+
+        await runTransaction(db, async (transaction) => {
+            const sfDoc = await transaction.get(docRef);
+            if (!sfDoc.exists()) throw "Document does not exist!";
+
+            const data = sfDoc.data();
+
+            if (memberObj.isLeader) {
+                transaction.update(docRef, {
                     checkedIn: true,
-                    checkInTime: new Date().toISOString()
-                };
-                await updateDoc(docRef, { members: updatedMembers });
+                    checkInTime: serverTimestamp()
+                });
+            } else {
+                const updatedMembers = [...(data.members || [])];
+                if (updatedMembers[memberObj.index]) {
+                    updatedMembers[memberObj.index] = {
+                        ...updatedMembers[memberObj.index],
+                        checkedIn: true,
+                        checkInTime: new Date().toISOString()
+                    };
+                    transaction.update(docRef, { members: updatedMembers });
+                } else {
+                    throw "Member not found";
+                }
             }
-        }
+        });
     };
 
     const checkInMember = async (memberIndex) => {
@@ -281,7 +292,17 @@ export default function Scanner() {
 
     return (
         <div className="min-h-screen bg-slate-900 text-white p-4 flex flex-col items-center">
-            <h1 className="text-2xl font-bold mb-6 text-indigo-400">Event Scanner</h1>
+
+            <div className="w-full max-w-md flex items-center justify-between mb-6">
+                <button
+                    onClick={() => navigate(-1)}
+                    className="p-2 bg-slate-800 rounded-full hover:bg-slate-700 transition-colors"
+                >
+                    <ArrowLeft size={24} className="text-slate-300" />
+                </button>
+                <h1 className="text-2xl font-bold text-indigo-400">Event Scanner</h1>
+                <div className="w-10"></div> {/* Spacer for centering */}
+            </div>
 
             {/* Scanner View */}
             {!scanResult && (

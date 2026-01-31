@@ -191,6 +191,49 @@ export default function CheckInDashboard() {
         }
     };
 
+    const toggleCheckInSafe = async (attendee) => {
+        const action = attendee.checkedIn ? "Check OUT" : "Check IN";
+        if (!confirm(`Are you sure you want to ${action} ${attendee.name}?`)) return;
+
+        try {
+            if (activeTab === 'unstop') {
+                const docRef = doc(db, "events", "innovate-for-impact", "attendees", attendee.id);
+                await updateDoc(docRef, {
+                    checkedIn: !attendee.checkedIn,
+                    checkInTime: !attendee.checkedIn ? serverTimestamp() : null
+                });
+                return;
+            }
+
+            const docRef = doc(db, ATTENDEE_COLLECTION, attendee.id);
+            await runTransaction(db, async (transaction) => {
+                const sfDoc = await transaction.get(docRef);
+                if (!sfDoc.exists()) throw "Document does not exist!";
+                const data = sfDoc.data();
+
+                if (attendee.isLeader) {
+                    const newStatus = !data.checkedIn;
+                    transaction.update(docRef, {
+                        checkedIn: newStatus,
+                        checkInTime: newStatus ? serverTimestamp() : null
+                    });
+                } else {
+                    const members = data.members || [];
+                    if (members[attendee.memberIndex]) {
+                        members[attendee.memberIndex].checkedIn = !members[attendee.memberIndex].checkedIn;
+                        members[attendee.memberIndex].checkInTime = members[attendee.memberIndex].checkedIn ? new Date() : null;
+                        transaction.update(docRef, { members });
+                    } else {
+                        throw "Member not found";
+                    }
+                }
+            });
+        } catch (err) {
+            console.error(err);
+            alert("Error updating status: " + err);
+        }
+    };
+
 
 
     const handleExportRSVP = () => {
@@ -332,7 +375,7 @@ export default function CheckInDashboard() {
                                                     <td className="px-6 py-4 font-mono text-sm text-slate-400">{attendee.barcode}</td>
                                                     <td className="px-6 py-4">
                                                         <button
-                                                            onClick={() => toggleCheckIn(attendee)}
+                                                            onClick={() => toggleCheckInSafe(attendee)}
                                                             className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 focus:ring-offset-slate-900 ${attendee.checkedIn ? 'bg-green-600' : 'bg-slate-600'}`}
                                                         >
                                                             <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${attendee.checkedIn ? 'translate-x-6' : 'translate-x-1'}`} />
@@ -404,7 +447,7 @@ export default function CheckInDashboard() {
                                                         <td className="px-6 py-4">
                                                             <div className="flex items-center gap-3">
                                                                 <button
-                                                                    onClick={() => toggleCheckIn(u)}
+                                                                    onClick={() => toggleCheckInSafe(u)}
                                                                     className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 focus:ring-offset-slate-900 ${u.checkedIn ? 'bg-green-600' : 'bg-slate-600'}`}
                                                                 >
                                                                     <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${u.checkedIn ? 'translate-x-6' : 'translate-x-1'}`} />

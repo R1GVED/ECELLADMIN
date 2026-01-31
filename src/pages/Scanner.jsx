@@ -85,6 +85,7 @@ export default function Scanner() {
 
     const handleScan = async (barcode) => {
         try {
+
             // Strategy 1: Direct Document ID Lookup
             let docRef = doc(db, ATTENDEE_COLLECTION, barcode);
             let docSnap = await getDoc(docRef);
@@ -194,6 +195,7 @@ export default function Scanner() {
                 setScanResult({
                     status: 'error',
                     message: 'Attendee NOT found.',
+
                     barcode
                 });
             }

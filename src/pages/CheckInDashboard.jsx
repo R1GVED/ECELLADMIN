@@ -3,7 +3,9 @@ import { db } from '../firebase';
 import { collection, query, onSnapshot, doc, setDoc, updateDoc, writeBatch, deleteDoc, serverTimestamp, getDoc, getDocs, runTransaction } from 'firebase/firestore';
 import { useAuth } from '../context/AuthContext';
 import QRCode from 'qrcode'; // using npm package
-import { LogOut, UserPlus, Trash2, Edit2, QrCode, ClipboardList, Save, Upload, Mars, Venus, Search, X, ArrowUp } from 'lucide-react';
+import { LogOut, UserPlus, Trash2, Edit2, QrCode, ClipboardList, Save, Upload, Mars, Venus, Search, X, ArrowUp, FileText } from 'lucide-react';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import { useNavigate } from 'react-router-dom';
 
 const ATTENDEE_COLLECTION = "rsvp_innovate_2026";
@@ -285,6 +287,58 @@ export default function CheckInDashboard() {
         document.body.removeChild(link);
     };
 
+    const handleExportPDF = () => {
+        const doc = new jsPDF();
+
+        // Add Title
+        doc.setFontSize(18);
+        doc.text(`Checked-In Attendees - ${activeTab === 'rsvp' ? 'RSVP' : 'Unstop'}`, 14, 22);
+        doc.setFontSize(11);
+        doc.text(`Generated on: ${new Date().toLocaleString()}`, 14, 30);
+
+        // Define Columns and Rows
+        let tableColumn = ["Name", "Team", "Status"];
+        let tableRows = [];
+
+        if (activeTab === 'rsvp') {
+            attendeeGroups.forEach(group => {
+                group.members.forEach(member => {
+                    if (member.checkedIn) {
+                        const rowData = [
+                            member.name,
+                            member.team,
+                            "Checked In"
+                        ];
+                        tableRows.push(rowData);
+                    }
+                });
+            });
+        } else {
+            unstopGroups.forEach(group => {
+                group.members.forEach(member => {
+                    if (member.checkedIn) {
+                        const rowData = [
+                            member["Candidate's Name"],
+                            member["Team Name"],
+                            "Checked In"
+                        ];
+                        tableRows.push(rowData);
+                    }
+                });
+            });
+        }
+
+        autoTable(doc, {
+            head: [tableColumn],
+            body: tableRows,
+            startY: 40,
+            theme: 'grid',
+            headStyles: { fillColor: [79, 70, 229] }, // Indigo color
+        });
+
+        doc.save(`checked_in_attendees_${activeTab}_${new Date().toISOString().slice(0, 10)}.pdf`);
+    };
+
     return (
         <div className="min-h-screen bg-slate-900 text-slate-100 font-sans">
             <header className="sticky top-0 z-30 bg-slate-800 border-b border-slate-700 shadow-md">
@@ -411,6 +465,12 @@ export default function CheckInDashboard() {
                                         className="px-3 py-1 bg-green-600 hover:bg-green-700 text-white rounded-lg text-xs font-semibold transition-colors flex items-center gap-2"
                                     >
                                         <Save size={14} /> Export CSV
+                                    </button>
+                                    <button
+                                        onClick={handleExportPDF}
+                                        className="px-3 py-1 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-semibold transition-colors flex items-center gap-2"
+                                    >
+                                        <FileText size={14} /> Export PDF
                                     </button>
                                 </div>
                             </div>

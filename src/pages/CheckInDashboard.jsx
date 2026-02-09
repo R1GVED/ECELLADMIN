@@ -339,6 +339,62 @@ export default function CheckInDashboard() {
         doc.save(`checked_in_attendees_${activeTab}_${new Date().toISOString().slice(0, 10)}.pdf`);
     };
 
+    const handleExportUnstop = () => {
+        // Get all unique keys from all attendees to build headers
+        const allKeys = new Set();
+        unstopGroups.forEach(group => {
+            group.members.forEach(member => {
+                Object.keys(member).forEach(key => allKeys.add(key));
+            });
+        });
+
+        // Define preferred column order
+        const preferredOrder = [
+            "Team ID", "Team Name", "Candidate role", "Candidate's Name",
+            "Candidate's Email", "Candidate's Mobile", "Candidate's Gender",
+            "Candidate's Organisation", "Reg. Status", "checkedIn", "checkInTime"
+        ];
+
+        // Build headers - preferred order first, then remaining
+        const headers = [];
+        preferredOrder.forEach(key => {
+            if (allKeys.has(key)) {
+                headers.push(key);
+                allKeys.delete(key);
+            }
+        });
+        headers.push(...Array.from(allKeys).filter(k => k !== 'id')); // Add remaining, skip internal 'id'
+
+        const rows = [];
+        unstopGroups.forEach(group => {
+            group.members.forEach(member => {
+                const rowValues = headers.map(header => {
+                    let value = member[header];
+                    if (header === 'checkedIn') {
+                        value = value ? 'Yes' : 'No';
+                    } else if (header === 'checkInTime' && value) {
+                        value = value.seconds
+                            ? new Date(value.seconds * 1000).toLocaleString()
+                            : new Date(value).toLocaleString();
+                    }
+                    // Escape quotes and wrap in quotes
+                    return `"${String(value || '').replace(/"/g, '""')}"`;
+                });
+                rows.push(rowValues.join(','));
+            });
+        });
+
+        const csvContent = [headers.map(h => `"${h}"`).join(','), ...rows].join('\n');
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.setAttribute('href', url);
+        link.setAttribute('download', `unstop_export_${new Date().toISOString().slice(0, 10)}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
+
     return (
         <div className="min-h-screen bg-slate-900 text-slate-100 font-sans">
             <header className="sticky top-0 z-30 bg-slate-800 border-b border-slate-700 shadow-md">
@@ -594,6 +650,18 @@ export default function CheckInDashboard() {
                                         )}
                                     </div>
                                     <span className="text-sm text-slate-400 hidden sm:inline">{stats.total} records</span>
+                                    <button
+                                        onClick={handleExportUnstop}
+                                        className="px-3 py-1 bg-green-600 hover:bg-green-700 text-white rounded-lg text-xs font-semibold transition-colors flex items-center gap-2"
+                                    >
+                                        <Save size={14} /> Export CSV
+                                    </button>
+                                    <button
+                                        onClick={handleExportPDF}
+                                        className="px-3 py-1 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-semibold transition-colors flex items-center gap-2"
+                                    >
+                                        <FileText size={14} /> Export PDF
+                                    </button>
                                 </div>
                             </div>
                             <div className="overflow-x-auto">

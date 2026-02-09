@@ -2,8 +2,10 @@ import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { Lock, Mail, ArrowRight, AlertCircle, QrCode, Users } from 'lucide-react';
-import { signInAnonymously } from 'firebase/auth';
+import { signInAnonymously, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 import { auth } from '../firebase';
+
+const googleProvider = new GoogleAuthProvider();
 
 export default function Login() {
     const [email, setEmail] = useState("");

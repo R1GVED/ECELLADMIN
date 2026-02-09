@@ -64,13 +64,19 @@ export default function CheckInDashboard() {
                         id: docId, // Firestore Document ID
                         uniqueId: `${docId}_leader`, // React Key
                         name: data.name,
+                        email: data.email || "",
+                        phone: data.phone || data.mobile || "",
                         eventName: eventName,
                         barcode: data.ticketId || docId,
                         role: `Leader - ${teamName}`,
                         checkedIn: !!data.checkedIn,
+                        checkInTime: data.checkInTime || null,
                         isLeader: true,
                         // Helper for UI
-                        team: teamName
+                        team: teamName,
+                        // Additional fields that might exist
+                        college: data.college || data.organisation || "",
+                        gender: data.gender || ""
                     });
                 }
 
@@ -82,13 +88,18 @@ export default function CheckInDashboard() {
                                 id: docId, // Parent Doc ID (same for all members)
                                 uniqueId: `${docId}_member_${index}`, // React Key
                                 name: member.name,
+                                email: member.email || "",
+                                phone: member.phone || member.mobile || "",
                                 eventName: eventName,
                                 barcode: member.ticketId || "N/A",
                                 role: `Member - ${teamName}`,
                                 checkedIn: !!member.checkedIn,
+                                checkInTime: member.checkInTime || null,
                                 isLeader: false,
                                 memberIndex: index,
-                                team: teamName
+                                team: teamName,
+                                college: member.college || member.organisation || "",
+                                gender: member.gender || ""
                             });
                         }
                     });
@@ -260,16 +271,20 @@ export default function CheckInDashboard() {
 
 
     const handleExportRSVP = () => {
-        const headers = ["Name", "Team", "Role", "Ticket ID", "Checked In", "Check-in Time"];
+        const headers = ["Name", "Email", "Phone", "Team", "Role", "College/Org", "Gender", "Ticket ID", "Checked In", "Check-in Time"];
         const rows = [];
 
         attendeeGroups.forEach(group => {
             group.members.forEach(member => {
                 rows.push([
-                    `"${member.name}"`,
-                    `"${member.team}"`,
-                    `"${member.role}"`,
-                    `"${member.barcode}"`,
+                    `"${member.name || ""}"`,
+                    `"${member.email || ""}"`,
+                    `"${member.phone || ""}"`,
+                    `"${member.team || ""}"`,
+                    `"${member.role || ""}"`,
+                    `"${member.college || ""}"`,
+                    `"${member.gender || ""}"`,
+                    `"${member.barcode || ""}"`,
                     member.checkedIn ? "Yes" : "No",
                     member.checkInTime ? `"${new Date(member.checkInTime.seconds ? member.checkInTime.seconds * 1000 : member.checkInTime).toLocaleString()}"` : ""
                 ].join(","));

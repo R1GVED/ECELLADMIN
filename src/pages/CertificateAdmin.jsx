@@ -2,8 +2,9 @@ import React, { useState, useEffect, useRef } from 'react';
 import { db, storage } from '../firebase'; // Ensure storage is exported from firebase.js
 import { doc, getDoc, setDoc, onSnapshot } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import CertificateCanvas from '../components/CertificateCanvas';
 import DraggableField from '../components/DraggableField';
-import { Save, Upload, Type, Move, Image as ImageIcon, Plus, CheckCircle } from 'lucide-react';
+import { Save, Upload, Type, Move, Image as ImageIcon, Plus, CheckCircle, Download, X } from 'lucide-react';
 
 const CANVAS_WIDTH = 800;
 const CANVAS_HEIGHT = 600;
@@ -140,10 +141,129 @@ export default function CertificateAdmin() {
         setLoading(false);
     };
 
+    const [showPreview, setShowPreview] = useState(false);
+    const [previewData, setPreviewData] = useState({});
+
+    // Import jsPDF dynamically or at top if not present. 
+    // Since we are replacing content, I'll add the imports at the top in a separate block or assume they are added.
+    // Wait, I need to do the imports first. 
+    // Actually, I can replace the whole return statement and add functions before it.
+
+    // ... (keeping existing functions)
+
+    const handlePreviewChange = (key, value) => {
+        setPreviewData(prev => ({ ...prev, [key]: value }));
+    };
+
+    const downloadPreviewStub = async (format) => {
+        const canvas = document.getElementById('preview-canvas');
+        if (!canvas) return;
+
+        try {
+            if (format === 'jpg') {
+                const link = document.createElement('a');
+                link.download = `Certificate_${previewData.name || 'Admin'}.jpg`;
+                link.href = canvas.toDataURL('image/jpeg', 0.9);
+                link.click();
+            } else if (format === 'pdf') {
+                const imgData = canvas.toDataURL('image/jpeg', 0.9);
+                const { jsPDF } = await import('jspdf'); // Dynamic import to be safe if not at top
+                const pdf = new jsPDF({
+                    orientation: 'landscape',
+                    unit: 'px',
+                    format: [canvas.width, canvas.height]
+                });
+                pdf.addImage(imgData, 'JPEG', 0, 0, canvas.width, canvas.height);
+                pdf.save(`Certificate_${previewData.name || 'Admin'}.pdf`);
+            }
+        } catch (err) {
+            console.error("Download error", err);
+            alert("Error downloading: " + err.message);
+        }
+    };
+
     const selectedField = fields.find(f => f.id === selectedFieldId);
 
     return (
         <div className="min-h-screen bg-slate-900 text-slate-100 p-8 flex flex-col items-center">
+            {/* Modal for Manual Generation */}
+            {showPreview && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fadeIn">
+                    <div className="bg-slate-800 rounded-2xl border border-slate-700 w-full max-w-6xl max-h-[90vh] flex flex-col overflow-hidden shadow-2xl">
+
+                        {/* Header */}
+                        <div className="p-6 border-b border-slate-700 flex justify-between items-center bg-slate-900/50">
+                            <div>
+                                <h2 className="text-2xl font-bold text-white flex items-center gap-2">
+                                    <CheckCircle className="text-green-500" /> Manual Generator
+                                </h2>
+                                <p className="text-slate-400 text-sm">Generate and download a specific certificate immediately.</p>
+                            </div>
+                            <button
+                                onClick={() => setShowPreview(false)}
+                                className="p-2 hover:bg-red-500/20 text-slate-400 hover:text-red-400 rounded-lg transition-colors"
+                            >
+                                <X size={24} />
+                            </button>
+                        </div>
+
+                        {/* Content */}
+                        <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
+                            {/* Controls */}
+                            <div className="w-full lg:w-1/3 p-6 overflow-y-auto border-r border-slate-700 bg-slate-800">
+                                <h3 className="uppercase text-xs font-bold text-slate-500 mb-4 tracking-wider">Field Values</h3>
+                                <div className="space-y-4">
+                                    {/* Extract unique keys from fields to generate inputs */}
+                                    {[...new Set(fields.map(f => f.key))].map(key => (
+                                        <div key={key}>
+                                            <label className="block text-sm font-medium text-slate-300 mb-1 capitalize">{key}</label>
+                                            <input
+                                                type="text"
+                                                className="w-full bg-slate-900 border border-slate-600 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-indigo-500 outline-none"
+                                                placeholder={`Enter ${key}...`}
+                                                value={previewData[key] || ''}
+                                                onChange={(e) => handlePreviewChange(key, e.target.value)}
+                                            />
+                                        </div>
+                                    ))}
+                                </div>
+
+                                <div className="mt-8 space-y-3">
+                                    <button
+                                        onClick={() => downloadPreviewStub('jpg')}
+                                        className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg shadow-indigo-500/20"
+                                    >
+                                        <Download size={18} /> Download JPG
+                                    </button>
+                                    <button
+                                        onClick={() => downloadPreviewStub('pdf')}
+                                        className="w-full py-3 bg-red-600 hover:bg-red-700 text-white rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg shadow-red-500/20"
+                                    >
+                                        <Download size={18} /> Download PDF
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Preview */}
+                            <div className="flex-1 bg-slate-900 p-8 flex items-center justify-center overflow-auto">
+                                <div className="relative shadow-2xl">
+                                    <CertificateCanvas
+                                        templateUrl={templateUrl}
+                                        fields={fields}
+                                        data={previewData}
+                                        width={CANVAS_WIDTH}
+                                        height={CANVAS_HEIGHT}
+                                        scale={0.8}
+                                        className="rounded-lg"
+                                        id="preview-canvas"
+                                    />
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             <div className="w-full max-w-7xl flex flex-col lg:flex-row gap-8">
 
                 {/* Visual Editor Area */}
@@ -209,19 +329,28 @@ export default function CertificateAdmin() {
                     </div>
 
                     <div className="mt-8 flex flex-col items-center gap-4">
-                        <button
-                            onClick={() => saveConfig()}
-                            disabled={loading}
-                            className={`px-8 py-3 rounded-xl font-bold flex items-center gap-2 transition-all shadow-lg ${saveStatus === 'saved'
-                                ? 'bg-green-600 text-white shadow-green-500/20'
-                                : saveStatus === 'error'
-                                    ? 'bg-red-600 text-white shadow-red-500/20'
-                                    : 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-500/20'
-                                }`}
-                        >
-                            <Save size={20} />
-                            {loading ? "Saving..." : saveStatus === 'saved' ? "Saved Successfully!" : "Save Configuration"}
-                        </button>
+                        <div className="flex gap-4">
+                            <button
+                                onClick={() => saveConfig()}
+                                disabled={loading}
+                                className={`px-8 py-3 rounded-xl font-bold flex items-center gap-2 transition-all shadow-lg ${saveStatus === 'saved'
+                                    ? 'bg-green-600 text-white shadow-green-500/20'
+                                    : saveStatus === 'error'
+                                        ? 'bg-red-600 text-white shadow-red-500/20'
+                                        : 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-500/20'
+                                    }`}
+                            >
+                                <Save size={20} />
+                                {loading ? "Saving..." : saveStatus === 'saved' ? "Saved Successfully!" : "Save Configuration"}
+                            </button>
+
+                            <button
+                                onClick={() => setShowPreview(true)}
+                                className="px-8 py-3 bg-slate-700 hover:bg-slate-600 text-white rounded-xl font-bold flex items-center gap-2 transition-all shadow-lg"
+                            >
+                                <CheckCircle size={20} /> Test / Generate
+                            </button>
+                        </div>
 
                         {lastSavedTime && (
                             <div className="text-slate-500 text-sm flex items-center gap-2">

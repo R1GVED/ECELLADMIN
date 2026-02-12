@@ -8,6 +8,8 @@ import EventEditor from './pages/EventEditor';
 import Scanner from './pages/Scanner';
 import PublicAttendance from './pages/PublicAttendance';
 import CheckInDashboard from './pages/CheckInDashboard';
+import CertificateAdmin from './pages/CertificateAdmin';
+import CertificateClaim from './pages/CertificateClaim';
 
 function App() {
   return (
@@ -18,12 +20,23 @@ function App() {
           <Route path="/login" element={<Login />} />
           <Route path="/scanner" element={<Scanner />} />
           <Route path="/public" element={<PublicAttendance />} />
+          <Route path="/certificate/claim" element={<CertificateClaim />} />
+
 
           <Route
             path="/dashboard"
             element={
               <ProtectedRoute>
                 <CheckInDashboard />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/dashboard/certificates"
+            element={
+              <ProtectedRoute>
+                <CertificateAdmin />
               </ProtectedRoute>
             }
           />

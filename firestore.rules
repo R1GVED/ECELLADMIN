@@ -1,0 +1,63 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper function to check if data is new (create only) and has valid timestamp
+    function isNew() {
+      return request.resource.data.submittedAt == request.time;
+    }
+
+    // Helper to validate basic string input to prevent massive payload attacks
+    function isValidString(text, maxLength) {
+      return text is string && text.size() > 0 && text.size() <= maxLength;
+    }
+
+    // --- CERTIFICATE SYSTEM RULES ---
+    
+    // 1. Certificate Templates (Public Read for generation, Admin Write for config)
+    match /certificate_templates/{document=**} {
+      allow read: if true;
+      allow write: if request.auth != null; 
+    }
+
+    // --- EXISTING RULES (MERGED) ---
+
+    // 2. RSVP Form 
+    // MODIFIED: Changed read/update to 'if true' to allow users to find their record and correct their name.
+    match /rsvp_innovate_2026/{document=**} {
+      allow read, update: if true; 
+      allow create: if 
+        isValidString(request.resource.data.name, 100) &&
+        isValidString(request.resource.data.email, 100);
+      allow delete: if request.auth != null; 
+    }
+
+    // 3. PUBLIC: Team Application
+    match /TEAM_APPLICATION_FORM/{document=**} {
+      allow read: if false;
+      allow create: if request.resource.data.fullName is string;
+      allow update, delete: if false;
+    }
+
+    // 4. PUBLIC: Newsletter Subscription
+    match /SUBSCRIPTION_REQUESTS/{document=**} {
+      allow read: if false;
+      allow create: if 
+        isValidString(request.resource.data.name, 100) &&
+        isValidString(request.resource.data.email, 100) &&
+        isValidString(request.resource.data.phone, 20);
+      allow update, delete: if false;
+    }
+
+    // 5. Events & Management
+    match /events/{eventId} {
+      allow read, write: if request.auth != null;
+      
+      // MODIFIED: Allow public read/update for attendees (for certificate generation)
+      match /attendees/{attendeeId} {
+        allow read, update: if true;
+        allow create, delete: if request.auth != null;
+      }
+    }
+  }
+}
